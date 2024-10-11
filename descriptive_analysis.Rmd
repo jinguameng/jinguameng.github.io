@@ -1,22 +1,33 @@
 ---
 title: "Descriptive Analysis"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: false
+    theme: lumen
 ---
 
 ```{r}
 ## load packages
+require(vtable)
+require(ggplot2)
+require(ggpubr)
 
 ## self-defined functions
 `%!in%` <- Negate(`%in%`)
 ```
 
-## Process Raw Hamarnized Dataset
+# Process Raw Hamarnized Dataset
 
 ```{r include=F, echo=F, message = FALSE, warning=F}
 ## load in raw phenotype data .xlsx format
 raw <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024.csv")
 
 ## subset columns
-raw <- raw[,c("Study","Phenotype_ID","Study_Visit","PHC_SCANDATE","PHC_Visit",
+raw <- raw[,c("Study","Phenotype_ID","Study_Visit","PHC_SCANDATE","PHC_Visit","PHC_Sex",
               "PHC_Education","PHC_Ethnicity","PHC_Race","PHC_Age_T1","PHC_Diagnosis",
               "PHC_ScannerBatchName","SPARE_AD","SPARE_BA")]
 dim(raw) 
@@ -44,8 +55,97 @@ paste0("Number of individuals: ", length(unique(baseline$Phenotype_ID)))
 
 It seems like some individuals have multiple baseline records, so extract those individuals and keep the one with smaller age
 ```{r}
+## create a unique ID for each case
+baseline$caseID <- seq(1,nrow(baseline))
+## extract the individual ID with duplicate phenotype ID
 ppIDwtDupBL <- baseline$Phenotype_ID[duplicated(baseline$Phenotype_ID)]
-
+## subset the dataset
+ppwtDupBL <- baseline[baseline$Phenotype_ID %in% ppIDwtDupBL,]
+smallerAge <- aggregate(PHC_Age_T1 ~ Phenotype_ID, ppwtDupBL, min)
+smallerAge2 <- merge(smallerAge,baseline,by=c("Phenotype_ID","PHC_Age_T1"))
+## remove pp with duplicate phenotype ID and bind with the smaller-age set
+tmp <- baseline[baseline$Phenotype_ID %!in% ppIDwtDupBL,]
+baseline2 <- rbind(tmp,smallerAge2)
+paste0("Baseline count: ", nrow(baseline2))
+paste0("Number of individuals: ", length(unique(baseline2$Phenotype_ID)))
 ```
 
+There is still one mismatch, so find out:
+```{r}
+baseline2$Phenotype_ID[duplicated(baseline2$Phenotype_ID)]
+```
+
+```{r}
+baseline2[baseline2$Phenotype_ID =="W82050",] 
+```
+
+This individual has the same age at T1 visit. But the SPARE_AD values are quite different. Given that the standard deviation of SPARE_AD is `r sd(baseline2$SPARE_AD)`, such difference is quite significant. Since this individual has no cognitive impairment diagnosis, I decided to use the smaller SPARE_AD value, which has caseID = 5815
+
+
+```{r}
+baseline3 <- baseline2[baseline2$caseID != "5815",]
+paste0("Baseline count: ", nrow(baseline3))
+paste0("Number of individuals: ", length(unique(baseline3$Phenotype_ID)))
+```
+
+clean the files
+```{r}
+rm(list=setdiff(ls(), c("baseline3","%!in%")))
+```
+
+# Participants Summary
+
+## Overall Distribution
+```{r echo=F}
+baseline3$Sex[baseline3$PHC_Sex==1] <- "Male"
+baseline3$Sex[baseline3$PHC_Sex==2] <- "Female"
+
+baseline3$Ethnicity[baseline3$PHC_Ethnicity==1] <- "Hispanic or Latino"
+baseline3$Ethnicity[baseline3$PHC_Ethnicity==2] <- "Not Hispanic or Latino"
+
+baseline3$Race[baseline3$PHC_Race==1] <- "American Indian or Alaska Native"
+baseline3$Race[baseline3$PHC_Race==2] <- "Asian"
+baseline3$Race[baseline3$PHC_Race==3] <- "Black or African American"
+baseline3$Race[baseline3$PHC_Race==4] <- "Native Hawaiian or Other Pacific Islander"
+baseline3$Race[baseline3$PHC_Race==5] <- "White"
+baseline3$Race[baseline3$PHC_Race==6] <- "Other, Unknown, or More than one race"
+
+baseline3$Diagnosis[baseline3$PHC_Diagnosis==1] <- "No Cognitive Impairment"
+baseline3$Diagnosis[baseline3$PHC_Diagnosis==2] <- "Mild Cognitive Impairment"
+baseline3$Diagnosis[baseline3$PHC_Diagnosis==3] <- "Alzheimer's Dementia"
+
+sumtable(baseline3,vars=c("PHC_Age_T1","SPARE_AD","SPARE_BA","Diagnosis","Race","Sex","PHC_Education","Ethnicity"),
+         group = 'Study')
+```
+
+**Frequency Table: Diagnosis by Study**
+
+```{r echo=F}
+table(baseline3$Diagnosis,useNA = "ifany")
+```
+
+```{r echo=F}
+table(baseline3$Diagnosis,baseline3$Study,useNA = "ifany")
+```
+
+
+**Histogram of SPARE-AD**
+```{r echo=F}
+hist(baseline3$SPARE_AD)
+```
+
+```{r echo=F}
+baseline3$PHC_Diagnosis <- factor(baseline3$PHC_Diagnosis, levels=c(1,2,3),
+  labels=c('No Cognitive Impairment','Mild Cognitive Impairment',"Alzheimer's Dementia"))
+```
+
+**Boxplot of SPARE-AD by Diagnosis**
+
+```{r}
+p <- ggboxplot(baseline3[!is.na(baseline3$PHC_Diagnosis),], x = "PHC_Diagnosis", y = "SPARE_AD",
+          color = "Diagnosis", palette = "jco",
+          add = "jitter")
+#  Add p-value
+p + stat_compare_means()
+```
 

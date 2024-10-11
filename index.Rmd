@@ -2,3 +2,7 @@
 title: "SPARE-AD"
 ---
 
+The **SPARE-AD score** (Spatial Pattern ofAbnormalities for Recognition of Early AD (1)) is an imaging biomarker providing individualized scores of diagnostic and predictive value well beyond standard measures, such as hippocampal volumes. It was calculated for each individual, using an SVM based classifier with a linear kernel. Positive SPARE-AD values indicate the presence of an AD-Iike spatial pattern of brain atrophy in an individual, and negative values indicate normal brain structure. Baseline SPARE-AD scores have been found to be predictive of subsequent cognitive decline in MCI individuals (2) and to differentiate between MCI converters and non-converters (3) on an individual patient basis. The rate of longitudinal change of SPARE-AD was also found in (l) to be a good predictor of conversion from cognitively normal to AD. SPARE-AD scores are therefore likely to be good imaging biomarkers of early AD.
+
+**Reference**
+https://adni.bitbucket.io/reference/docs/UPENNSPARE_AD/ADNI1_SPARE_AD.pdf

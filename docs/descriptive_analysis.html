@@ -16,7 +16,7 @@
 <script src="site_libs/header-attrs-2.28/header-attrs.js"></script>
 <script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link href="site_libs/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<link href="site_libs/bootstrap-3.3.5/css/lumen.min.css" rel="stylesheet" />
 <script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
 <script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
 <script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
@@ -29,9 +29,14 @@
        h6 {font-size: 12px;}
        code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
        pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.13.2/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
 <script src="site_libs/navigation-1.1/tabsets.js"></script>
 <link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
 <script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
 
 <style type="text/css">
   code{white-space: pre-wrap;}
@@ -219,6 +224,69 @@ $(document).ready(function () {
 
 
 
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
 
 </head>
 
@@ -226,6 +294,16 @@ $(document).ready(function () {
 
 
 <div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
 
 
 
@@ -266,11 +344,17 @@ $(document).ready(function () {
 
 
 <pre class="r"><code>## load packages
-
-## self-defined functions
+require(vtable)</code></pre>
+<pre><code>## Loading required package: vtable</code></pre>
+<pre><code>## Loading required package: kableExtra</code></pre>
+<pre class="r"><code>require(ggplot2)</code></pre>
+<pre><code>## Loading required package: ggplot2</code></pre>
+<pre class="r"><code>require(ggpubr)</code></pre>
+<pre><code>## Loading required package: ggpubr</code></pre>
+<pre class="r"><code>## self-defined functions
 `%!in%` &lt;- Negate(`%in%`)</code></pre>
-<div id="process-raw-hamarnized-dataset" class="section level2">
-<h2>Process Raw Hamarnized Dataset</h2>
+<div id="process-raw-hamarnized-dataset" class="section level1">
+<h1>Process Raw Hamarnized Dataset</h1>
 <p>PHC_Visit frequency table:</p>
 <pre><code>## 
 ##    1    2    3    4    5    6    7    8    9   10   11   12   13   14   15   16 
@@ -289,11 +373,933 @@ paste0(&quot;Baseline count: &quot;, nrow(baseline))</code></pre>
 <pre><code>## [1] &quot;Number of individuals: 5334&quot;</code></pre>
 <p>It seems like some individuals have multiple baseline records, so
 extract those individuals and keep the one with smaller age</p>
-<pre class="r"><code>ppIDwtDupBL &lt;- baseline$Phenotype_ID[duplicated(baseline$Phenotype_ID)]</code></pre>
+<pre class="r"><code>## create a unique ID for each case
+baseline$caseID &lt;- seq(1,nrow(baseline))
+## extract the individual ID with duplicate phenotype ID
+ppIDwtDupBL &lt;- baseline$Phenotype_ID[duplicated(baseline$Phenotype_ID)]
+## subset the dataset
+ppwtDupBL &lt;- baseline[baseline$Phenotype_ID %in% ppIDwtDupBL,]
+smallerAge &lt;- aggregate(PHC_Age_T1 ~ Phenotype_ID, ppwtDupBL, min)
+smallerAge2 &lt;- merge(smallerAge,baseline,by=c(&quot;Phenotype_ID&quot;,&quot;PHC_Age_T1&quot;))
+## remove pp with duplicate phenotype ID and bind with the smaller-age set
+tmp &lt;- baseline[baseline$Phenotype_ID %!in% ppIDwtDupBL,]
+baseline2 &lt;- rbind(tmp,smallerAge2)
+paste0(&quot;Baseline count: &quot;, nrow(baseline2))</code></pre>
+<pre><code>## [1] &quot;Baseline count: 5335&quot;</code></pre>
+<pre class="r"><code>paste0(&quot;Number of individuals: &quot;, length(unique(baseline2$Phenotype_ID)))</code></pre>
+<pre><code>## [1] &quot;Number of individuals: 5334&quot;</code></pre>
+<p>There is still one mismatch, so find out:</p>
+<pre class="r"><code>baseline2$Phenotype_ID[duplicated(baseline2$Phenotype_ID)]</code></pre>
+<pre><code>## [1] &quot;W82050&quot;</code></pre>
+<pre class="r"><code>baseline2[baseline2$Phenotype_ID ==&quot;W82050&quot;,] </code></pre>
+<pre><code>##      Study Phenotype_ID Study_Visit PHC_SCANDATE PHC_Visit PHC_Sex
+## 549 WHICAP       W82050        &lt;NA&gt;   2011-05-11         1       2
+## 550 WHICAP       W82050        &lt;NA&gt;   2011-05-11         1       2
+##     PHC_Education PHC_Ethnicity PHC_Race PHC_Age_T1 PHC_Diagnosis
+## 549            12             1        6   69.35524             1
+## 550            12             1        6   69.35524             1
+##     PHC_ScannerBatchName  SPARE_AD SPARE_BA caseID
+## 549            Philips3T 0.1786114 75.55633   5815
+## 550            Philips3T 1.9573671 78.61181   5816</code></pre>
+<p>This individual has the same age at T1 visit. But the SPARE_AD values
+are quite different. Given that the standard deviation of SPARE_AD is
+1.3253874, such difference is quite significant. Since this individual
+has no cognitive impairment diagnosis, I decided to use the smaller
+SPARE_AD value, which has caseID = 5815</p>
+<pre class="r"><code>baseline3 &lt;- baseline2[baseline2$caseID != &quot;5815&quot;,]
+paste0(&quot;Baseline count: &quot;, nrow(baseline3))</code></pre>
+<pre><code>## [1] &quot;Baseline count: 5334&quot;</code></pre>
+<pre class="r"><code>paste0(&quot;Number of individuals: &quot;, length(unique(baseline3$Phenotype_ID)))</code></pre>
+<pre><code>## [1] &quot;Number of individuals: 5334&quot;</code></pre>
+<p>clean the files</p>
+<pre class="r"><code>rm(list=setdiff(ls(), c(&quot;baseline3&quot;,&quot;%!in%&quot;)))</code></pre>
+</div>
+<div id="participants-summary" class="section level1">
+<h1>Participants Summary</h1>
+<div id="overall-distribution" class="section level2">
+<h2>Overall Distribution</h2>
+<table class="table" style="margin-left: auto; margin-right: auto;">
+<caption>
+Summary Statistics
+</caption>
+<thead>
+<tr>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="1">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+Study
+</div>
+</th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="3">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+ADNI
+</div>
+</th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="3">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+NACC
+</div>
+</th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="3">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+ROSMAPMARS
+</div>
+</th>
+<th style="border-bottom:hidden;padding-bottom:0; padding-left:3px;padding-right:3px;text-align: center; " colspan="3">
+<div style="border-bottom: 1px solid #ddd; padding-bottom: 5px; ">
+WHICAP
+</div>
+</th>
+</tr>
+<tr>
+<th style="text-align:left;">
+Variable
+</th>
+<th style="text-align:left;">
+N
+</th>
+<th style="text-align:left;">
+Mean
+</th>
+<th style="text-align:left;">
+SD
+</th>
+<th style="text-align:left;">
+N
+</th>
+<th style="text-align:left;">
+Mean
+</th>
+<th style="text-align:left;">
+SD
+</th>
+<th style="text-align:left;">
+N
+</th>
+<th style="text-align:left;">
+Mean
+</th>
+<th style="text-align:left;">
+SD
+</th>
+<th style="text-align:left;">
+N
+</th>
+<th style="text-align:left;">
+Mean
+</th>
+<th style="text-align:left;">
+SD
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+PHC_Age_T1
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+73
+</td>
+<td style="text-align:left;">
+7.4
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+73
+</td>
+<td style="text-align:left;">
+7.5
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+78
+</td>
+<td style="text-align:left;">
+7.3
+</td>
+<td style="text-align:left;">
+82
+</td>
+<td style="text-align:left;">
+71
+</td>
+<td style="text-align:left;">
+5.1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SPARE_AD
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+-0.54
+</td>
+<td style="text-align:left;">
+1.3
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+-0.59
+</td>
+<td style="text-align:left;">
+1.4
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+-1
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+82
+</td>
+<td style="text-align:left;">
+-1.3
+</td>
+<td style="text-align:left;">
+0.71
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SPARE_BA
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+62
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+62
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+65
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+82
+</td>
+<td style="text-align:left;">
+56
+</td>
+<td style="text-align:left;">
+9.5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Diagnosis
+</td>
+<td style="text-align:left;">
+2434
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2065
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+74
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Alzheimer’s Dementia
+</td>
+<td style="text-align:left;">
+419
+</td>
+<td style="text-align:left;">
+17%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+399
+</td>
+<td style="text-align:left;">
+19%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+1%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+1%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Mild Cognitive Impairment
+</td>
+<td style="text-align:left;">
+1120
+</td>
+<td style="text-align:left;">
+46%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+642
+</td>
+<td style="text-align:left;">
+31%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+131
+</td>
+<td style="text-align:left;">
+22%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+14
+</td>
+<td style="text-align:left;">
+19%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… No Cognitive Impairment
+</td>
+<td style="text-align:left;">
+895
+</td>
+<td style="text-align:left;">
+37%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1024
+</td>
+<td style="text-align:left;">
+50%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+464
+</td>
+<td style="text-align:left;">
+77%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+59
+</td>
+<td style="text-align:left;">
+80%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Race
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+82
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… American Indian or Alaska Native
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+1%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+0
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Asian
+</td>
+<td style="text-align:left;">
+57
+</td>
+<td style="text-align:left;">
+2%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+39
+</td>
+<td style="text-align:left;">
+2%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+0
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Black or African American
+</td>
+<td style="text-align:left;">
+179
+</td>
+<td style="text-align:left;">
+7%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+266
+</td>
+<td style="text-align:left;">
+12%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+89
+</td>
+<td style="text-align:left;">
+15%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+28
+</td>
+<td style="text-align:left;">
+34%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Native Hawaiian or Other Pacific Islander
+</td>
+<td style="text-align:left;">
+2
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+0
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+0
+</td>
+<td style="text-align:left;">
+0%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Other, Unknown, or More than one race
+</td>
+<td style="text-align:left;">
+43
+</td>
+<td style="text-align:left;">
+2%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+14
+</td>
+<td style="text-align:left;">
+1%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+1%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+41
+</td>
+<td style="text-align:left;">
+50%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… White
+</td>
+<td style="text-align:left;">
+2174
+</td>
+<td style="text-align:left;">
+88%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1860
+</td>
+<td style="text-align:left;">
+85%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+499
+</td>
+<td style="text-align:left;">
+83%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:left;">
+16%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Sex
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+82
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Female
+</td>
+<td style="text-align:left;">
+1177
+</td>
+<td style="text-align:left;">
+48%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+1265
+</td>
+<td style="text-align:left;">
+58%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+455
+</td>
+<td style="text-align:left;">
+76%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+42
+</td>
+<td style="text-align:left;">
+51%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Male
+</td>
+<td style="text-align:left;">
+1282
+</td>
+<td style="text-align:left;">
+52%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+926
+</td>
+<td style="text-align:left;">
+42%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+147
+</td>
+<td style="text-align:left;">
+24%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+40
+</td>
+<td style="text-align:left;">
+49%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+PHC_Education
+</td>
+<td style="text-align:left;">
+2459
+</td>
+<td style="text-align:left;">
+16
+</td>
+<td style="text-align:left;">
+2.7
+</td>
+<td style="text-align:left;">
+2187
+</td>
+<td style="text-align:left;">
+16
+</td>
+<td style="text-align:left;">
+3.2
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+16
+</td>
+<td style="text-align:left;">
+3.4
+</td>
+<td style="text-align:left;">
+81
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+4.7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Ethnicity
+</td>
+<td style="text-align:left;">
+2447
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2191
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+602
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+75
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Hispanic or Latino
+</td>
+<td style="text-align:left;">
+122
+</td>
+<td style="text-align:left;">
+5%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+168
+</td>
+<td style="text-align:left;">
+8%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+16
+</td>
+<td style="text-align:left;">
+3%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+34
+</td>
+<td style="text-align:left;">
+45%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+… Not Hispanic or Latino
+</td>
+<td style="text-align:left;">
+2325
+</td>
+<td style="text-align:left;">
+95%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+2023
+</td>
+<td style="text-align:left;">
+92%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+586
+</td>
+<td style="text-align:left;">
+97%
+</td>
+<td style="text-align:left;">
+</td>
+<td style="text-align:left;">
+41
+</td>
+<td style="text-align:left;">
+55%
+</td>
+<td style="text-align:left;">
+</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Frequency Table: Diagnosis by Study</strong></p>
+<pre><code>## 
+##      Alzheimer&#39;s Dementia Mild Cognitive Impairment   No Cognitive Impairment 
+##                       826                      1907                      2442 
+##                      &lt;NA&gt; 
+##                       159</code></pre>
+<pre><code>##                            
+##                             ADNI NACC ROSMAPMARS WHICAP
+##   Alzheimer&#39;s Dementia       419  399          7      1
+##   Mild Cognitive Impairment 1120  642        131     14
+##   No Cognitive Impairment    895 1024        464     59
+##   &lt;NA&gt;                        25  126          0      8</code></pre>
+<p><strong>Histogram of SPARE-AD</strong>
+<img src="descriptive_analysis_files/figure-html/unnamed-chunk-14-1.png" width="672" /></p>
+<p><strong>Boxplot of SPARE-AD by Diagnosis</strong></p>
+<pre class="r"><code>p &lt;- ggboxplot(baseline3[!is.na(baseline3$PHC_Diagnosis),], x = &quot;PHC_Diagnosis&quot;, y = &quot;SPARE_AD&quot;,
+          color = &quot;Diagnosis&quot;, palette = &quot;jco&quot;,
+          add = &quot;jitter&quot;)
+#  Add p-value
+p + stat_compare_means()</code></pre>
+<p><img src="descriptive_analysis_files/figure-html/unnamed-chunk-16-1.png" width="672" /></p>
+</div>
 </div>
 
 
 
+</div>
+</div>
 
 </div>
 
@@ -326,6 +1332,35 @@ $(document).ready(function () {
 
 <!-- code folding -->
 
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
 
 <!-- dynamically load mathjax for compatibility with self-contained -->
 <script>
