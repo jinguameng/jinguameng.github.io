@@ -1,0 +1,9 @@
+name: "SPARE-AD"
+output_dir: "docs"
+navbar:
+  title: "SPARE-AD"
+  left:
+    - text: "Home"
+      href: index.html
+    - text: "Descriptive Analysis"
+      href: descriptive_analysis.html

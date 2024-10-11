@@ -1,0 +1,51 @@
+---
+title: "Descriptive Analysis"
+---
+
+```{r}
+## load packages
+
+## self-defined functions
+`%!in%` <- Negate(`%in%`)
+```
+
+## Process Raw Hamarnized Dataset
+
+```{r include=F, echo=F, message = FALSE, warning=F}
+## load in raw phenotype data .xlsx format
+raw <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024.csv")
+
+## subset columns
+raw <- raw[,c("Study","Phenotype_ID","Study_Visit","PHC_SCANDATE","PHC_Visit",
+              "PHC_Education","PHC_Ethnicity","PHC_Race","PHC_Age_T1","PHC_Diagnosis",
+              "PHC_ScannerBatchName","SPARE_AD","SPARE_BA")]
+dim(raw) 
+```
+
+PHC_Visit frequency table:
+```{r echo=F}
+table(raw$PHC_Visit,useNA = "ifany")
+## remove NA
+raw_noNA <- raw[!is.na(raw$PHC_Visit),]
+```
+
+Get number of individuals
+```{r}
+print(length(unique(raw_noNA$Phenotype_ID)))
+```
+
+Subset and get baseline data
+```{r}
+baseline <- raw_noNA[raw_noNA$PHC_Visit==1,]
+## remove NA
+paste0("Baseline count: ", nrow(baseline))
+paste0("Number of individuals: ", length(unique(baseline$Phenotype_ID)))
+```
+
+It seems like some individuals have multiple baseline records, so extract those individuals and keep the one with smaller age
+```{r}
+ppIDwtDupBL <- baseline$Phenotype_ID[duplicated(baseline$Phenotype_ID)]
+
+```
+
+
