@@ -10,142 +10,486 @@ output:
     theme: lumen
 ---
 
-```{r}
+```{r, include=F}
 ## load packages
 require(vtable)
 require(ggplot2)
 require(ggpubr)
-
+require(table1)
+# require(summarytools)
+require(tidyverse)
+require(dplyr)
 ## self-defined functions
 `%!in%` <- Negate(`%in%`)
 ```
 
-# Process Raw Hamarnized Dataset
 
+```{css}
+.bggreen {
+background-color: rgb(206, 237, 202);
+}
+```
+
+# Process Raw Hamarnized Dataset
 ```{r include=F, echo=F, message = FALSE, warning=F}
 ## load in raw phenotype data .xlsx format
-raw <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024.csv")
+# raw <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024.csv")
 
 ## subset columns
-raw <- raw[,c("Study","Phenotype_ID","Study_Visit","PHC_SCANDATE","PHC_Visit","PHC_Sex",
-              "PHC_Education","PHC_Ethnicity","PHC_Race","PHC_Age_T1","PHC_Diagnosis",
-              "PHC_ScannerBatchName","SPARE_AD","SPARE_BA")]
+# raw <- raw[,c("Study","Phenotype_ID","Study_Visit","PHC_SCANDATE","PHC_Visit","PHC_Sex",
+#               "PHC_Education","PHC_Ethnicity","PHC_Race","PHC_Age_T1","PHC_Diagnosis",
+#               "PHC_ScannerBatchName","SPARE_AD","SPARE_BA")]
+
+# write.csv(raw,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024_subset.csv",
+#           col.names = T,row.names = F, quote = F)
+
+raw <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/All_T1-MUSE_CleanedApr2024_subset.csv")
+raw$PHC_SCANDATE <- as.Date(raw$PHC_SCANDATE)
+
 dim(raw) 
 ```
 
 PHC_Visit frequency table:
 ```{r echo=F}
 table(raw$PHC_Visit,useNA = "ifany")
-## remove NA
-raw_noNA <- raw[!is.na(raw$PHC_Visit),]
 ```
 
 Get number of individuals
 ```{r}
-print(length(unique(raw_noNA$Phenotype_ID)))
+print(length(unique(raw$Phenotype_ID)))
 ```
 
 Subset and get baseline data
 ```{r}
-baseline <- raw_noNA[raw_noNA$PHC_Visit==1,]
-## remove NA
+## detect individuals with same age at different PHC visit
+dupAge <- raw %>%
+  select(Phenotype_ID,PHC_Age_T1) %>%
+  group_by(Phenotype_ID,PHC_Age_T1) %>%
+  filter(n()>1)
+
+print("Inviduals with duplicate PHC_Age_T1")
+print(raw[raw$Phenotype_ID %in% dupAge$Phenotype_ID,])
+
+## remove those people
+raw_nodup <- raw[raw$Phenotype_ID %!in% dupAge$Phenotype_ID,]
+
+## extract baseline data
+tmp <- raw_nodup %>%
+  select(Phenotype_ID,PHC_Age_T1) %>%
+  group_by(Phenotype_ID) %>%
+  arrange(PHC_Age_T1) %>%
+  mutate(last = ifelse(row_number() == last(row_number()), T, F)) %>%
+  mutate(first = ifelse(row_number() == first(row_number()), T, F)) %>%
+  ungroup()
+
+tmp <- merge(tmp,raw_nodup, by=c("Phenotype_ID","PHC_Age_T1"))
+
+## get number of individuals with only one observation
+ppID_oneObs <- tmp[tmp$last == T &  tmp$first == T,]
+table(ppID_oneObs$Study)
+
+baseline <- tmp[tmp$first==T,]
 paste0("Baseline count: ", nrow(baseline))
 paste0("Number of individuals: ", length(unique(baseline$Phenotype_ID)))
 ```
 
-It seems like some individuals have multiple baseline records, so extract those individuals and keep the one with smaller age
-```{r}
-## create a unique ID for each case
-baseline$caseID <- seq(1,nrow(baseline))
-## extract the individual ID with duplicate phenotype ID
-ppIDwtDupBL <- baseline$Phenotype_ID[duplicated(baseline$Phenotype_ID)]
-## subset the dataset
-ppwtDupBL <- baseline[baseline$Phenotype_ID %in% ppIDwtDupBL,]
-smallerAge <- aggregate(PHC_Age_T1 ~ Phenotype_ID, ppwtDupBL, min)
-smallerAge2 <- merge(smallerAge,baseline,by=c("Phenotype_ID","PHC_Age_T1"))
-## remove pp with duplicate phenotype ID and bind with the smaller-age set
-tmp <- baseline[baseline$Phenotype_ID %!in% ppIDwtDupBL,]
-baseline2 <- rbind(tmp,smallerAge2)
-paste0("Baseline count: ", nrow(baseline2))
-paste0("Number of individuals: ", length(unique(baseline2$Phenotype_ID)))
-```
-
-There is still one mismatch, so find out:
-```{r}
-baseline2$Phenotype_ID[duplicated(baseline2$Phenotype_ID)]
-```
-
-```{r}
-baseline2[baseline2$Phenotype_ID =="W82050",] 
-```
-
-This individual has the same age at T1 visit. But the SPARE_AD values are quite different. Given that the standard deviation of SPARE_AD is `r sd(baseline2$SPARE_AD)`, such difference is quite significant. Since this individual has no cognitive impairment diagnosis, I decided to use the smaller SPARE_AD value, which has caseID = 5815
-
-
-```{r}
-baseline3 <- baseline2[baseline2$caseID != "5815",]
-paste0("Baseline count: ", nrow(baseline3))
-paste0("Number of individuals: ", length(unique(baseline3$Phenotype_ID)))
-```
-
-clean the files
-```{r}
-rm(list=setdiff(ls(), c("baseline3","%!in%")))
-```
-
-# Participants Summary
-
-## Overall Distribution
-```{r echo=F}
-baseline3$Sex[baseline3$PHC_Sex==1] <- "Male"
-baseline3$Sex[baseline3$PHC_Sex==2] <- "Female"
-
-baseline3$Ethnicity[baseline3$PHC_Ethnicity==1] <- "Hispanic or Latino"
-baseline3$Ethnicity[baseline3$PHC_Ethnicity==2] <- "Not Hispanic or Latino"
-
-baseline3$Race[baseline3$PHC_Race==1] <- "American Indian or Alaska Native"
-baseline3$Race[baseline3$PHC_Race==2] <- "Asian"
-baseline3$Race[baseline3$PHC_Race==3] <- "Black or African American"
-baseline3$Race[baseline3$PHC_Race==4] <- "Native Hawaiian or Other Pacific Islander"
-baseline3$Race[baseline3$PHC_Race==5] <- "White"
-baseline3$Race[baseline3$PHC_Race==6] <- "Other, Unknown, or More than one race"
-
-baseline3$Diagnosis[baseline3$PHC_Diagnosis==1] <- "No Cognitive Impairment"
-baseline3$Diagnosis[baseline3$PHC_Diagnosis==2] <- "Mild Cognitive Impairment"
-baseline3$Diagnosis[baseline3$PHC_Diagnosis==3] <- "Alzheimer's Dementia"
-
-sumtable(baseline3,vars=c("PHC_Age_T1","SPARE_AD","SPARE_BA","Diagnosis","Race","Sex","PHC_Education","Ethnicity"),
-         group = 'Study')
-```
-
-**Frequency Table: Diagnosis by Study**
 
 ```{r echo=F}
-table(baseline3$Diagnosis,useNA = "ifany")
+## clean workspace
+rm(list=setdiff(ls(), c("baseline","%!in%")))
+```
+
+
+# Dataset Summary
+```{r echo=F}
+baseline$Sex[baseline$PHC_Sex==1] <- "Male"
+baseline$Sex[baseline$PHC_Sex==2] <- "Female"
+
+baseline$Ethnicity[baseline$PHC_Ethnicity==1] <- "Hispanic or Latino"
+baseline$Ethnicity[baseline$PHC_Ethnicity==2] <- "Not Hispanic or Latino"
+
+baseline$Race[baseline$PHC_Race==1] <- "American Indian or Alaska Native"
+baseline$Race[baseline$PHC_Race==2] <- "Asian"
+baseline$Race[baseline$PHC_Race==3] <- "Black or African American"
+baseline$Race[baseline$PHC_Race==4] <- "Native Hawaiian or Other Pacific Islander"
+baseline$Race[baseline$PHC_Race==5] <- "White"
+baseline$Race[baseline$PHC_Race==6] <- "Other, Unknown, or More than one race"
+
+baseline$Diagnosis[baseline$PHC_Diagnosis==1] <- "No Cognitive Impairment"
+baseline$Diagnosis[baseline$PHC_Diagnosis==2] <- "Mild Cognitive Impairment"
+baseline$Diagnosis[baseline$PHC_Diagnosis==3] <- "Alzheimer's Dementia"
+
+```
+
+## Table 1
+```{r}
+table1(~ Sex + PHC_Age_T1 + SPARE_AD + SPARE_BA + Race + PHC_Education + Diagnosis | Study, data=baseline)
+```
+
+## Histogram of SPARE-AD
+```{r echo=F}
+hist(baseline$SPARE_AD)
 ```
 
 ```{r echo=F}
-table(baseline3$Diagnosis,baseline3$Study,useNA = "ifany")
-```
-
-
-**Histogram of SPARE-AD**
-```{r echo=F}
-hist(baseline3$SPARE_AD)
-```
-
-```{r echo=F}
-baseline3$PHC_Diagnosis <- factor(baseline3$PHC_Diagnosis, levels=c(1,2,3),
+baseline$PHC_Diagnosis <- factor(baseline$PHC_Diagnosis, levels=c(1,2,3),
   labels=c('No Cognitive Impairment','Mild Cognitive Impairment',"Alzheimer's Dementia"))
 ```
 
-**Boxplot of SPARE-AD by Diagnosis**
+## Boxplot of SPARE-AD by Diagnosis
 
 ```{r}
-p <- ggboxplot(baseline3[!is.na(baseline3$PHC_Diagnosis),], x = "PHC_Diagnosis", y = "SPARE_AD",
+p <- ggboxplot(baseline[!is.na(baseline$PHC_Diagnosis),], x = "PHC_Diagnosis", y = "SPARE_AD",
           color = "Diagnosis", palette = "jco",
           add = "jitter")
-#  Add p-value
-p + stat_compare_means()
+p + stat_compare_means(method = "anova") #  Add p-value
 ```
 
+
+# Prepare Genotype Data
+## ADNI
+
+**File path**: /nfs/DATA/ADNI/GWAS/Imputed/TOPMed/Cleaned
+
+<br>
+
+| Imputed PLINK File | PCs | Race | Variants | Participants |
+|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
+|   ADNI_NHW_imputed_final  | ADNI_NHW_imputed_final_shorter_bimids_pruned.pca.evec | NHW  |    7,953,372   |    1414  |
+|  ADNI_NHB_imputed_final_nooutliers  |  ADNI_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.evec |   NHB   |   8,028,923  | 58 |
+
+<br>
+
+**Data Preparation Code at ACCRE and local**
+```{r,eval=F,class.source="bggreen"}
+## mkdir
+cd /data/h_vmac/zhanm32
+mkdir mkdir SPARE_AD
+cd SPARE_AD
+mkdir DATA
+mkdir CODE
+mkdir OUTPUT
+mkdir DATA/ADNI
+mkdir DATA/NACC
+mkdir DATA/ROSMAP
+
+## copy geno data and PCs 
+cp /nfs/DATA/ADNI/GWAS/Imputed/TOPMed/Cleaned/ADNI_NHW_imputed_final.* /data/h_vmac/zhanm32/SPARE_AD/DATA/ADNI
+
+cp /nfs/DATA/ADNI/GWAS/Imputed/TOPMed/Cleaned/ADNI_NHW_imputed_final_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/ADNI
+
+## download .fam and PC file to local (/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno) to generate final pheno_covs file
+## code: /Users/mengnazhang/Documents/jinguameng.github.io/descriptive_analysis.Rmd
+
+## remove the first line of PC file
+cd /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno
+
+tail -n +2 ADNI_NHW_imputed_final_shorter_bimids_pruned.pca.evec > ADNI_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec
+```
+
+**Prepare pheno_covs file**
+```{r}
+fam_ADNI <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ADNI_NHW_imputed_final.fam",header = F)
+pc_ADNI <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ADNI_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+## subset .fam file and rename the columns
+fam_ADNI <- fam_ADNI[,c(1:2)]
+colnames(fam_ADNI) <- c("FID","IID")
+fam_ADNI$FIDIID <- paste0(fam_ADNI$FID,":",fam_ADNI$IID)
+
+## subset PCs file and rename the columns
+pc_ADNI <- pc_ADNI[,c(1:11)]
+colnames(pc_ADNI) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+## merge .fam file and PCs file
+tmp <- merge(fam_ADNI,pc_ADNI,by="FIDIID")
+
+## merge with pheno data
+baseline_ADNI <- subset(baseline,baseline$Study == "ADNI")
+pheno_ADNI <- merge(tmp,baseline_ADNI,by.x = "IID",by.y = "Phenotype_ID")
+## reorder the columns
+pheno_ADNI <- pheno_ADNI[,c(3,1,2,4:32)]
+## save the file
+write.table(pheno_ADNI,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/ADNI_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+paste0("Number of observations of final cleaned pheno_covs file for ADNI non-hispanic white: ", nrow(pheno_ADNI))
+```
+
+<br>
+
+### Table 1
+```{r echo=F}
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_ADNI)
+```
+
+<br>
+
+### Box plot
+```{r,echo=F}
+p <- ggboxplot(pheno_ADNI, x = "PHC_Diagnosis", y = "SPARE_AD",
+          color = "Diagnosis", palette = "jco",
+          add = "jitter")
+p + stat_compare_means(method = "anova")
+```
+
+<br>
+
+**Upload ADNI_clean_pheno_covs.txt file to ACCRE: /data/h_vmac/zhanm32/SPARE_AD/DATA/ADNI/**
+
+```{r echo=F}
+## clean workspace
+rm(list=setdiff(ls(), c("baseline","%!in%","pheno_ADNI")))
+```
+
+<br>
+<br>
+
+## NACC
+**File path**: /nfs/DATA/NACC/GWAS/Imputed/TOPMed/Cleaned
+
+<br>
+
+| Imputed PLINK File | PCs | Race | Variants | Participants |
+|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| NACC_NHW_imputed_final  | NACC_NHW_imputed_final_shorter_bimids_pruned.pca.evec | NHW  |    7,432,354   |    22572  |
+| NACC_NHB_imputed_final_nooutliers  | NACC_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.evec |   NHB   |   6,007,563  | 2919 |
+
+<br>
+
+**Data Preparation Code at ACCRE and local**
+```{r,eval=F,class.source="bggreen"}
+## copy geno data and PCs 
+cp /nfs/DATA/NACC/GWAS/Imputed/TOPMed/Cleaned/NACC_NHW_imputed_final.* /data/h_vmac/zhanm32/SPARE_AD/DATA/NACC
+
+cp /nfs/DATA/NACC/GWAS/Imputed/TOPMed/Cleaned/NACC_NHW_imputed_final_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/NACC
+
+cp /nfs/DATA/NACC/GWAS/Imputed/TOPMed/Cleaned/NACC_NHB_imputed_final_nooutliers.* /data/h_vmac/zhanm32/SPARE_AD/DATA/NACC
+
+cp /nfs/DATA/NACC/GWAS/Imputed/TOPMed/Cleaned/NACC_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/NACC
+
+## download .fam and PC file to local (/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno) to generate final pheno_covs file
+## code: /Users/mengnazhang/Documents/jinguameng.github.io/descriptive_analysis.Rmd
+
+## remove the first line of PC file
+cd /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno
+
+tail -n +2 NACC_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.evec > NACC_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.nohead.evec
+
+tail -n +2 NACC_NHW_imputed_final_shorter_bimids_pruned.pca.evec > NACC_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec
+```
+
+**Prepare pheno_covs file**
+```{r}
+fam_NACC_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/NACC_NHW_imputed_final.fam",header = F)
+pc_NACC_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/NACC_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+fam_NACC_NHB <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/NACC_NHB_imputed_final_nooutliers.fam",header = F)
+pc_NACC_NHB <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/NACC_NHB_imputed_final_nooutliers_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+## subset .fam file and rename the columns
+fam_NACC_NHW <- fam_NACC_NHW[,c(1:2)]
+colnames(fam_NACC_NHW) <- c("FID","IID")
+fam_NACC_NHW$FIDIID <- paste0(fam_NACC_NHW$FID,":",fam_NACC_NHW$IID)
+
+fam_NACC_NHB <- fam_NACC_NHB[,c(1:2)]
+colnames(fam_NACC_NHB) <- c("FID","IID")
+fam_NACC_NHB$FIDIID <- paste0(fam_NACC_NHB$FID,":",fam_NACC_NHB$IID)
+
+## subset PCs file and rename the columns
+pc_NACC_NHW <- pc_NACC_NHW[,c(1:11)]
+colnames(pc_NACC_NHW) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+pc_NACC_NHB <- pc_NACC_NHB[,c(1:11)]
+colnames(pc_NACC_NHB) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+## merge .fam file and PCs file
+tmp_NHW <- merge(fam_NACC_NHW,pc_NACC_NHW,by="FIDIID")
+tmp_NHB <- merge(fam_NACC_NHB,pc_NACC_NHB,by="FIDIID")
+
+## merge with pheno data
+baseline_NACC <- subset(baseline,baseline$Study == "NACC")
+pheno_NACC_NHW <- merge(tmp_NHW,baseline_NACC,by.x = "IID",by.y = "Phenotype_ID")
+
+pheno_NACC_NHB <- merge(tmp_NHB,baseline_NACC,by.x = "IID",by.y = "Phenotype_ID")
+
+## reorder the columns
+pheno_NACC_NHW <- pheno_NACC_NHW[,c(3,1,2,4:32)]
+
+pheno_NACC_NHB <- pheno_NACC_NHB[,c(3,1,2,4:32)]
+
+## save the file
+write.table(pheno_NACC_NHW,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/NACC_NHW_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+
+write.table(pheno_NACC_NHB,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/NACC_NHB_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+
+paste0("Number of observations of final cleaned pheno_covs file for NACC Non-Hispanic white: ", nrow(pheno_NACC_NHW))
+
+paste0("Number of observations of final cleaned pheno_covs file for NACC Non-Hispanic black: ", nrow(pheno_NACC_NHB))
+
+```
+
+<br>
+
+### Table 1 of NACC Non-Hispanic White
+```{r echo=F}
+table(pheno_NACC_NHW$Diagnosis,useNA = "ifany")
+pheno_NACC_NHW.noNA <- pheno_NACC_NHW[!is.na(pheno_NACC_NHW$Diagnosis),]
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_NACC_NHW.noNA)
+```
+
+<br>
+
+### Box plot of NACC Non-Hispanic White
+```{r, echo=FALSE}
+p <- ggboxplot(pheno_NACC_NHW.noNA, x = "PHC_Diagnosis", y = "SPARE_AD",
+          color = "Diagnosis", palette = "jco",
+          add = "jitter")
+p + stat_compare_means(method = "anova")
+```
+
+<br>
+
+### Table 1 of NACC Non-Hispanic Black
+
+```{r echo=F}
+table(pheno_NACC_NHB$Diagnosis,useNA = "ifany")
+pheno_NACC_NHB.noNA <- pheno_NACC_NHB[!is.na(pheno_NACC_NHB$Diagnosis),]
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_NACC_NHB.noNA)
+```
+
+<br>
+
+### Box plot of NACC Non-Hispanic Black
+```{r, echo=F}
+p <- ggboxplot(pheno_NACC_NHB.noNA, x = "PHC_Diagnosis", y = "SPARE_AD",
+          color = "Diagnosis", palette = "jco",
+          add = "jitter")
+p + stat_compare_means(method = "anova")
+```
+
+
+**Upload NACC_NHW_clean_pheno_covs.txt and NACC_NHB_clean_pheno_covs.txt files to ACCRE: /data/h_vmac/zhanm32/SPARE_AD/DATA/NACC/**
+
+```{r echo=F}
+## clean workspace
+rm(list=setdiff(ls(), c("baseline","%!in%","pheno_ADNI","pheno_NACC_NHW","pheno_NACC_NHB")))
+```
+
+<br>
+<br>
+
+
+## ROSMAP
+**File path**: /nfs/DATA/ROSMAP/GWAS/Imputed/TOPMed/Cleaned
+
+<br>
+
+| Imputed PLINK File | PCs | Race | Variants | Participants |
+|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| ROSMAP_NHW_imputed_final | ROSMAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec | NHW  |  7,624,508 | 2120 |
+| ROSMAP_NHB_final_updatedIDs_nooutliers | ROSMAP_NHB_final_updatedIDs_nooutliers_shorter_bimids_pruned.pca.evec |   NHB   | 5,120,071 | 532 |
+
+<br>
+
+**Data Preparation Code at ACCRE and local**
+```{r,eval=F,class.source="bggreen"}
+## copy geno data and PCs 
+cp /nfs/DATA/ROSMAP/GWAS/Imputed/TOPMed/Cleaned/ROSMAP_NHW_imputed_final.* /data/h_vmac/zhanm32/SPARE_AD/DATA/ROSMAP
+
+cp /nfs/DATA/ROSMAP/GWAS/Imputed/TOPMed/Cleaned/ROSMAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/ROSMAP
+
+cp /nfs/DATA/ROSMAP/GWAS/Imputed/TOPMed/Cleaned/ROSMAP_NHB_final_updatedIDs_nooutliers.* /data/h_vmac/zhanm32/SPARE_AD/DATA/ROSMAP
+
+cp /nfs/DATA/ROSMAP/GWAS/Imputed/TOPMed/Cleaned/ROSMAP_NHB_final_updatedIDs_nooutliers_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/ROSMAP
+
+## download .fam and PC file to local (/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno) to generate final pheno_covs file
+## code: /Users/mengnazhang/Documents/jinguameng.github.io/descriptive_analysis.Rmd
+
+## remove the first line of PC file
+cd /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno
+
+tail -n +2 ROSMAP_NHB_final_updatedIDs_nooutliers_shorter_bimids_pruned.pca.evec > ROSMAP_NHB_final_updatedIDs_nooutliers_shorter_bimids_pruned.pca.nohead.evec
+
+tail -n +2 ROSMAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec > ROSMAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec
+```
+
+**Prepare pheno_covs file**
+```{r}
+fam_ROSMAP_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ROSMAP_NHW_imputed_final.fam",header = F)
+pc_ROSMAP_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ROSMAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+
+fam_ROSMAP_NHB <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ROSMAP_NHB_final_updatedIDs_nooutliers.fam",header = F)
+pc_ROSMAP_NHB <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/ROSMAP_NHB_final_updatedIDs_nooutliers_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+## subset .fam file and rename the columns
+fam_ROSMAP_NHW <- fam_ROSMAP_NHW[,c(1:2)]
+colnames(fam_ROSMAP_NHW) <- c("FID","IID")
+fam_ROSMAP_NHW$FIDIID <- paste0(fam_ROSMAP_NHW$FID,":",fam_ROSMAP_NHW$IID)
+
+fam_ROSMAP_NHB <- fam_ROSMAP_NHB[,c(1:2)]
+colnames(fam_ROSMAP_NHB) <- c("FID","IID")
+fam_ROSMAP_NHB$FIDIID <- paste0(fam_ROSMAP_NHB$FID,":",fam_ROSMAP_NHB$IID)
+
+## subset PCs file and rename the columns
+pc_ROSMAP_NHW <- pc_ROSMAP_NHW[,c(1:11)]
+colnames(pc_ROSMAP_NHW) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+pc_ROSMAP_NHB <- pc_ROSMAP_NHB[,c(1:11)]
+colnames(pc_ROSMAP_NHB) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+## merge .fam file and PCs file
+tmp_NHW <- merge(fam_ROSMAP_NHW,pc_ROSMAP_NHW,by="FIDIID") ## 532
+tmp_NHB <- merge(fam_ROSMAP_NHB,pc_ROSMAP_NHB,by="FIDIID") ## 2120
+
+## merge with pheno data
+baseline_ROSMAP <- subset(baseline,baseline$Study == "ROSMAPMARS")
+pheno_ROSMAP_NHW <- merge(tmp_NHW,baseline_ROSMAP,by.x = "IID",by.y = "Phenotype_ID")
+
+pheno_ROSMAP_NHB <- merge(tmp_NHB,baseline_ROSMAP,by.x = "IID",by.y = "Phenotype_ID")
+
+## reorder the columns
+pheno_ROSMAP_NHW <- pheno_ROSMAP_NHW[,c(3,1,2,4:32)]
+
+pheno_ROSMAP_NHB <- pheno_ROSMAP_NHB[,c(3,1,2,4:32)]
+
+## save the file
+write.table(pheno_ROSMAP_NHW,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/ROSMAP_NHW_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+
+write.table(pheno_ROSMAP_NHB,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/ROSMAP_NHB_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+
+paste0("Number of observations of final cleaned pheno_covs file for ROSMAP Non-Hispanic white: ", nrow(pheno_ROSMAP_NHW))
+
+paste0("Number of observations of final cleaned pheno_covs file for ROSMAP Non-Hispanic black: ", nrow(pheno_ROSMAP_NHB))
+```
+
+<br>
+
+### Table 1 of ROSMAP Non-Hispanic White
+
+```{r echo=F}
+table(pheno_ROSMAP_NHW$Diagnosis,useNA = "ifany")
+pheno_ROSMAP_NHW.noNA <- pheno_ROSMAP_NHW[!is.na(pheno_ROSMAP_NHW$Diagnosis),]
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_ROSMAP_NHW.noNA)
+```
+
+<br>
+
+### Table 1 of ROSMAP Non-Hispanic Black
+
+```{r echo=F}
+table(pheno_ROSMAP_NHB$Diagnosis,useNA = "ifany")
+pheno_ROSMAP_NHB.noNA <- pheno_ROSMAP_NHB[!is.na(pheno_ROSMAP_NHB$Diagnosis),]
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_ROSMAP_NHB.noNA)
+```
+
+<br>
+
+**Upload ROSMAP_NHW_clean_pheno_covs.txt and ROSMAP_NHB_clean_pheno_covs.txt files to ACCRE: /data/h_vmac/zhanm32/SPARE_AD/DATA/ROSMAP/**
+
+```{r echo=F}
+## clean workspace
+rm(list=setdiff(ls(), c("baseline","%!in%","pheno_ADNI","pheno_NACC_NHW","pheno_NACC_NHB","pheno_ROSMAP_NHW","pheno_ROSMAP_NHB")))
+```
+
+<br>
+<br>
