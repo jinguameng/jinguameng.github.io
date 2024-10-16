@@ -1697,6 +1697,236 @@ ROSMAP_NHB_clean_pheno_covs.txt files to ACCRE:
 <p><br> <br></p>
 </div>
 </div>
+<div id="wrap" class="section level2">
+<h2>WRAP</h2>
+<p><strong>File path</strong>:
+/nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/</p>
+<p><br></p>
+<table>
+<colgroup>
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+<col width="20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center">Imputed PLINK File</th>
+<th align="center">PCs</th>
+<th align="center">Race</th>
+<th align="center">Variants</th>
+<th align="center">Participants</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center">WRAP_NHW_norelateds_final</td>
+<td align="center">WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec
+(n=910)</td>
+<td align="center">NHW</td>
+<td align="center">7,969,625</td>
+<td align="center">1270</td>
+</tr>
+<tr class="even">
+<td align="center">WRAP_NHB_norelateds_final_nooutliers</td>
+<td
+align="center">WRAP_NHB_norelateds_final_nooutliers_shorter_bimids_pruned.pca.evec</td>
+<td align="center">NHB</td>
+<td align="center">7,023,754</td>
+<td align="center">95</td>
+</tr>
+</tbody>
+</table>
+<p><br></p>
+<p><strong>Data Preparation Code at ACCRE and local</strong></p>
+<pre class="r bggreen"><code>## copy geno data and PCs 
+mkdir /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+cp /nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/WRAP_NHW_relateds_final.* /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+cp /nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+## download .fam and PC file to local (/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno) to generate final pheno_covs file
+## code: /Users/mengnazhang/Documents/jinguameng.github.io/descriptive_analysis.Rmd
+
+## remove the first line of PC file
+cd /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno
+
+tail -n +2 WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec &gt; WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec</code></pre>
+<p><strong>Prepare pheno_covs file</strong> When merging the PCs file
+with the SPARE-AD pheno file, the ID needs to be converted, I used the
+file: /CNT/Data/WRAP/Phenotype/2023/Raw/WRAP_to_DBID_05Oct2023.csv and
+put it in the local folder:
+/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/WRAP_to_DBID_05Oct2023.csv</p>
+<pre class="r"><code>fam_WRAP_NHW &lt;- read.table(&quot;/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/WRAP_NHW_relateds_final.fam&quot;,header = F)
+pc_WRAP_NHW &lt;- read.table(&quot;/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec&quot;,header = F)
+
+## subset .fam file and rename the columns
+fam_WRAP_NHW &lt;- fam_WRAP_NHW[,c(1:2)]
+colnames(fam_WRAP_NHW) &lt;- c(&quot;FID&quot;,&quot;IID&quot;)
+fam_WRAP_NHW$FIDIID &lt;- paste0(fam_WRAP_NHW$FID,&quot;:&quot;,fam_WRAP_NHW$IID)
+
+## subset PCs file and rename the columns
+pc_WRAP_NHW &lt;- pc_WRAP_NHW[,c(1:11)]
+colnames(pc_WRAP_NHW) &lt;- c(&quot;FIDIID&quot;,paste0(&quot;PC&quot;,seq(1:10)))
+
+## merge .fam file and PCs file
+tmp_NHW &lt;- merge(fam_WRAP_NHW,pc_WRAP_NHW,by=&quot;FIDIID&quot;) ## 910
+
+## merge with pheno data
+
+baseline_WRAP &lt;- subset(baseline,baseline$Study == &quot;WRAP&quot;)
+
+idmatch &lt;- read.csv(&quot;/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/WRAP_to_DBID_05Oct2023.csv&quot;)
+
+colnames(idmatch)[1] &lt;- &quot;Phenotype_ID&quot;
+
+baseline_WRAP2 &lt;- merge(baseline_WRAP,idmatch,by=&quot;Phenotype_ID&quot;) ## 612 obs
+
+pheno_WRAP_NHW &lt;- merge(tmp_NHW,baseline_WRAP2,by.x = &quot;IID&quot;,by.y = &quot;DBID&quot;) ## 412 obs
+
+## reorder the columns
+pheno_WRAP_NHW &lt;- pheno_WRAP_NHW[,c(3,1,2,4:33)]
+
+## save the file
+write.table(pheno_WRAP_NHW,&quot;/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/WRAP_NHW_clean_pheno_covs.txt&quot;,col.names=T,row.names = F,quote = F,sep=&quot;\t&quot;)
+
+paste0(&quot;Number of observations of final cleaned pheno_covs file for WRAP Non-Hispanic white: &quot;, nrow(pheno_WRAP_NHW))</code></pre>
+<pre><code>## [1] &quot;Number of observations of final cleaned pheno_covs file for WRAP Non-Hispanic white: 412&quot;</code></pre>
+<p><br></p>
+<div id="table-1-of-wrap-non-hispanic-white" class="section level3">
+<h3>Table 1 of WRAP Non-Hispanic White</h3>
+<pre><code>## 
+##      Alzheimer&#39;s Dementia Mild Cognitive Impairment   No Cognitive Impairment 
+##                         2                        13                       396 
+##                      &lt;NA&gt; 
+##                         1</code></pre>
+<div class="Rtable1"><table class="Rtable1">
+<thead>
+<tr>
+<th class='rowlabel firstrow lastrow'></th>
+<th class='firstrow lastrow'><span class='stratlabel'>Alzheimer's Dementia<br><span class='stratn'>(N=2)</span></span></th>
+<th class='firstrow lastrow'><span class='stratlabel'>Mild Cognitive Impairment<br><span class='stratn'>(N=13)</span></span></th>
+<th class='firstrow lastrow'><span class='stratlabel'>No Cognitive Impairment<br><span class='stratn'>(N=396)</span></span></th>
+<th class='firstrow lastrow'><span class='stratlabel'>Overall<br><span class='stratn'>(N=411)</span></span></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class='rowlabel firstrow'>factor(Sex)</td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+</tr>
+<tr>
+<td class='rowlabel'>Female</td>
+<td>1 (50.0%)</td>
+<td>6 (46.2%)</td>
+<td>277 (69.9%)</td>
+<td>284 (69.1%)</td>
+</tr>
+<tr>
+<td class='rowlabel lastrow'>Male</td>
+<td class='lastrow'>1 (50.0%)</td>
+<td class='lastrow'>7 (53.8%)</td>
+<td class='lastrow'>119 (30.1%)</td>
+<td class='lastrow'>127 (30.9%)</td>
+</tr>
+<tr>
+<td class='rowlabel firstrow'>PHC_Age_T1</td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+</tr>
+<tr>
+<td class='rowlabel'>Mean (SD)</td>
+<td>63.6 (3.61)</td>
+<td>68.9 (6.61)</td>
+<td>62.8 (7.27)</td>
+<td>63.0 (7.30)</td>
+</tr>
+<tr>
+<td class='rowlabel lastrow'>Median [Min, Max]</td>
+<td class='lastrow'>63.6 [61.1, 66.2]</td>
+<td class='lastrow'>70.1 [58.1, 78.7]</td>
+<td class='lastrow'>62.9 [44.3, 83.8]</td>
+<td class='lastrow'>63.2 [44.3, 83.8]</td>
+</tr>
+<tr>
+<td class='rowlabel firstrow'>SPARE_AD</td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+</tr>
+<tr>
+<td class='rowlabel'>Mean (SD)</td>
+<td>-0.278 (2.02)</td>
+<td>-0.963 (1.33)</td>
+<td>-1.64 (0.760)</td>
+<td>-1.61 (0.800)</td>
+</tr>
+<tr>
+<td class='rowlabel lastrow'>Median [Min, Max]</td>
+<td class='lastrow'>-0.278 [-1.71, 1.15]</td>
+<td class='lastrow'>-1.39 [-2.66, 1.29]</td>
+<td class='lastrow'>-1.62 [-4.60, 0.754]</td>
+<td class='lastrow'>-1.61 [-4.60, 1.29]</td>
+</tr>
+<tr>
+<td class='rowlabel firstrow'>SPARE_BA</td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+</tr>
+<tr>
+<td class='rowlabel'>Mean (SD)</td>
+<td>58.1 (13.2)</td>
+<td>59.5 (12.3)</td>
+<td>47.6 (9.98)</td>
+<td>48.0 (10.3)</td>
+</tr>
+<tr>
+<td class='rowlabel lastrow'>Median [Min, Max]</td>
+<td class='lastrow'>58.1 [48.8, 67.4]</td>
+<td class='lastrow'>57.8 [41.8, 77.7]</td>
+<td class='lastrow'>47.5 [22.3, 78.4]</td>
+<td class='lastrow'>47.9 [22.3, 78.4]</td>
+</tr>
+<tr>
+<td class='rowlabel firstrow'>PHC_Education</td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+<td class='firstrow'></td>
+</tr>
+<tr>
+<td class='rowlabel'>Mean (SD)</td>
+<td>17.0 (4.24)</td>
+<td>15.8 (2.42)</td>
+<td>16.7 (2.73)</td>
+<td>16.7 (2.73)</td>
+</tr>
+<tr>
+<td class='rowlabel lastrow'>Median [Min, Max]</td>
+<td class='lastrow'>17.0 [14.0, 20.0]</td>
+<td class='lastrow'>16.0 [12.0, 20.0]</td>
+<td class='lastrow'>17.0 [12.0, 29.0]</td>
+<td class='lastrow'>17.0 [12.0, 29.0]</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><br></p>
+<p><strong>Upload WRAP_NHW_clean_pheno_covs.txt file to ACCRE:
+/data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP/</strong></p>
+<p><br> <br></p>
+</div>
+</div>
 </div>
 
 

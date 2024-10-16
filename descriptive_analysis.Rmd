@@ -493,3 +493,100 @@ rm(list=setdiff(ls(), c("baseline","%!in%","pheno_ADNI","pheno_NACC_NHW","pheno_
 
 <br>
 <br>
+
+
+## WRAP
+**File path**: /nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/
+
+<br>
+
+| Imputed PLINK File | PCs | Race | Variants | Participants |
+|:-------------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| WRAP_NHW_norelateds_final | WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec (n=910) | NHW  |  7,969,625 | 1270 |
+| WRAP_NHB_norelateds_final_nooutliers | WRAP_NHB_norelateds_final_nooutliers_shorter_bimids_pruned.pca.evec | NHB | 7,023,754 | 95 |
+
+<br>
+
+**Data Preparation Code at ACCRE and local**
+```{r,eval=F,class.source="bggreen"}
+## copy geno data and PCs 
+mkdir /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+cp /nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/WRAP_NHW_relateds_final.* /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+cp /nfs/DATA/WRAP/GWAS/Imputed/TOPMed/Cleaned/WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP
+
+## download .fam and PC file to local (/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno) to generate final pheno_covs file
+## code: /Users/mengnazhang/Documents/jinguameng.github.io/descriptive_analysis.Rmd
+
+## remove the first line of PC file
+cd /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno
+
+tail -n +2 WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.evec > WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec
+
+```
+
+
+
+**Prepare pheno_covs file**
+When merging the PCs file with the SPARE-AD pheno file, the ID needs to be converted, I used the file:
+/CNT/Data/WRAP/Phenotype/2023/Raw/WRAP_to_DBID_05Oct2023.csv and put it in the local folder: /Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/WRAP_to_DBID_05Oct2023.csv
+```{r}
+fam_WRAP_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/WRAP_NHW_relateds_final.fam",header = F)
+pc_WRAP_NHW <- read.table("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/geno/WRAP_NHW_imputed_final_shorter_bimids_pruned.pca.nohead.evec",header = F)
+
+## subset .fam file and rename the columns
+fam_WRAP_NHW <- fam_WRAP_NHW[,c(1:2)]
+colnames(fam_WRAP_NHW) <- c("FID","IID")
+fam_WRAP_NHW$FIDIID <- paste0(fam_WRAP_NHW$FID,":",fam_WRAP_NHW$IID)
+
+## subset PCs file and rename the columns
+pc_WRAP_NHW <- pc_WRAP_NHW[,c(1:11)]
+colnames(pc_WRAP_NHW) <- c("FIDIID",paste0("PC",seq(1:10)))
+
+## merge .fam file and PCs file
+tmp_NHW <- merge(fam_WRAP_NHW,pc_WRAP_NHW,by="FIDIID") ## 910
+
+## merge with pheno data
+
+baseline_WRAP <- subset(baseline,baseline$Study == "WRAP")
+
+idmatch <- read.csv("/Users/mengnazhang/Desktop/SPARE-AD/Data/Raw/pheno/WRAP_to_DBID_05Oct2023.csv")
+
+colnames(idmatch)[1] <- "Phenotype_ID"
+
+baseline_WRAP2 <- merge(baseline_WRAP,idmatch,by="Phenotype_ID") ## 612 obs
+
+pheno_WRAP_NHW <- merge(tmp_NHW,baseline_WRAP2,by.x = "IID",by.y = "DBID") ## 412 obs
+
+## reorder the columns
+pheno_WRAP_NHW <- pheno_WRAP_NHW[,c(3,1,2,4:33)]
+
+## save the file
+write.table(pheno_WRAP_NHW,"/Users/mengnazhang/Desktop/SPARE-AD/Data/Clean/WRAP_NHW_clean_pheno_covs.txt",col.names=T,row.names = F,quote = F,sep="\t")
+
+paste0("Number of observations of final cleaned pheno_covs file for WRAP Non-Hispanic white: ", nrow(pheno_WRAP_NHW))
+
+```
+<br>
+
+### Table 1 of WRAP Non-Hispanic White
+
+```{r echo=F}
+table(pheno_WRAP_NHW$Diagnosis,useNA = "ifany")
+pheno_WRAP_NHW.noNA <- pheno_WRAP_NHW[!is.na(pheno_WRAP_NHW$Diagnosis),]
+table1(~ factor(Sex) + PHC_Age_T1 + SPARE_AD + SPARE_BA + PHC_Education | Diagnosis, data=pheno_WRAP_NHW.noNA)
+```
+
+
+<br>
+
+**Upload WRAP_NHW_clean_pheno_covs.txt file to ACCRE: /data/h_vmac/zhanm32/SPARE_AD/DATA/WRAP/**
+
+```{r echo=F}
+## clean workspace
+rm(list=setdiff(ls(), c("baseline","%!in%","pheno_ADNI","pheno_NACC_NHW","pheno_NACC_NHB","pheno_ROSMAP_NHW","pheno_ROSMAP_NHB","pheno_WRAP_NHW")))
+```
+
+<br>
+<br>
